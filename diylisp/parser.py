@@ -1,27 +1,150 @@
 # -*- coding: utf-8 -*-
 
 import re
+import logging
+
 from .ast import is_boolean, is_list
 from .types import LispError
 
 """
 This is the parser module, with the `parse` function which you'll implement as part 1 of
-the workshop. Its job is to convert strings into data structures that the evaluator can 
-understand. 
+the workshop. Its job is to convert strings into data structures that the evaluator can
+understand.
 """
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+TOK_PAR_OPEN  = '('
+TOK_PAR_CLOSE = ')'
 
 def parse(source):
     """Parse string representation of one *single* expression
     into the corresponding Abstract Syntax Tree."""
+    logger.debug("parse: source=%s", source)
 
-    raise NotImplementedError("DIY")
+    source = source.strip()
+    source = remove_comments(source)
+
+    ast = None
+    stack = []
+
+    for tok in token_gen(source):
+        logger.debug("parse: tok=%s, ast=%r, stack=%r", tok, ast, stack)
+        value = None
+        if tok == TOK_PAR_OPEN:
+            logger.debug("parse: TOK_PAR_OPEN")
+            if ast:
+                # new open paren -- push current ast to the stack, make new ast.
+                stack.append(ast)
+
+            ast = []
+
+        elif tok == TOK_PAR_CLOSE:
+            logger.debug("parse: TOK_PAR_CLOSE")
+            if stack:
+                # closing paren -- restore previous ast
+                prev = stack.pop()
+                prev.append(ast)
+                ast = prev
+
+        elif parse_boolean(tok) is not None:
+            value = parse_boolean(tok)
+            logger.debug("parse: BOOLEAN: %r", value)
+
+        elif parse_int(tok) is not None:
+            value = parse_int(tok)
+            logger.debug("parse: INTEGER: %r", value)
+
+        else:
+            logger.debug("parse: SYMBOL")
+            value = tok
+
+        if value is not None:
+            if ast is not None:
+                ast.append(value)
+            else:
+                return value
+
+    return ast
+
+def parse_int(tok):
+    try:
+        return int(tok)
+    except ValueError, e:
+        pass
+
+    return None
+
+def parse_boolean(tok):
+    if tok == "#t":
+        return True
+    elif tok == "#f":
+        return False
+    return None
+
+def parse_symbol(tok):
+    return strip(tok)
+
+
+def token_gen(e, level=0):
+    logger.debug("%02d token_gen: e=%s" % (level, e))
+    tok = ""
+    pos = 0
+    while pos < len(e):
+        c = e[pos]
+        logging.debug(" %d %c: '%s'" % (pos, c, tok))
+        if c == TOK_PAR_OPEN:
+            logging.debug("TOK_PAR_OPEN")
+            p = find_matching_paren(e, pos)
+            yield TOK_PAR_OPEN
+
+            logging.debug("recur {")
+            for tok1 in token_gen(e[pos+1:p], level=level+1):
+                yield tok1
+
+            logging.debug("} recur")
+
+            yield TOK_PAR_CLOSE
+
+            pos = p + 1
+
+            tok = ""
+        elif c == TOK_PAR_CLOSE:
+            raise LispError("Unmatched closing paren.")
+        elif c  in " \n\r":
+            logging.debug("WHITESPACE")
+            if len(tok):
+                yield tok
+            tok = ""
+        else:
+            logging.debug("TOKEN")
+            tok = tok + c
+
+        pos = pos + 1
+
+    if len(tok):
+        yield tok
+
 
 ##
-## Below are a few useful utility functions. These should come in handy when 
-## implementing `parse`. We don't want to spend the day implementing parenthesis 
+## Below are a few useful utility functions. These should come in handy when
+## implementing `parse`. We don't want to spend the day implementing parenthesis
 ## counting, after all.
-## 
+##
+
+def next_token(e, pos):
+    tok = ""
+    if len(e) == 0:
+        return (None, 0, "")
+
+    for c in e[pos:]:
+        if c in " \n\r":
+            return (tok, pos, e[pos:])
+        tok = tok + c
+        pos = pos + 1
+
+    return (None, pos, e)
 
 
 def remove_comments(source):
@@ -30,7 +153,7 @@ def remove_comments(source):
 
 
 def find_matching_paren(source, start=0):
-    """Given a string and the index of an opening parenthesis, determines 
+    """Given a string and the index of an opening parenthesis, determines
     the index of the matching closing paren."""
 
     assert source[start] == '('
@@ -48,10 +171,10 @@ def find_matching_paren(source, start=0):
 
 
 def split_exps(source):
-    """Splits a source string into subexpressions 
+    """Splits a source string into subexpressions
     that can be parsed individually.
 
-    Example: 
+    Example:
 
         > split_exps("foo bar (baz 123)")
         ["foo", "bar", "(baz 123)"]
@@ -66,10 +189,10 @@ def split_exps(source):
 
 
 def first_expression(source):
-    """Split string into (exp, rest) where exp is the 
-    first expression in the string and rest is the 
+    """Split string into (exp, rest) where exp is the
+    first expression in the string and rest is the
     rest of the string after this expression."""
-    
+
     source = source.strip()
     if source[0] == "'":
         exp, rest = first_expression(source[1:])
