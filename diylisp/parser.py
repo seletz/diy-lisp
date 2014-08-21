@@ -56,6 +56,7 @@ def do_parse(source, pos, level=0):
 
     elif c == TOK_QUOTE:
         log("TOK_QUOTE")
+        expr, pend = parse_quote(source, pos, level + 1)
 
     elif c == '#':
         log("BOOL")
@@ -106,9 +107,32 @@ def parse_expr(source, pos, level=0):
 
         pos += 1
 
+    pos = pclose + 1  # skip )
     log("=> %r, %d", expr, pos)
-    return expr, pclose + 1
+    return expr, pos
 
+def parse_quote(source, pos, level=0):
+    """parse_quote() -> ()
+
+    >>> parse_quote("'foo", 0)
+    (['quote', 'foo'], 4)
+
+    >>> parse_quote("'()", 0)
+    (['quote', []], 3)
+
+    """
+    def log(msg, *args):
+        logger.info("%s parse_quote: " + msg, level*"    ", *args)
+    assert source[pos] == TOK_QUOTE
+
+    pos = pos + 1  # skip '
+
+    sub_expr, pos = do_parse(source, pos, level + 1)
+
+    expr = ["quote", sub_expr]
+
+    log("=> %r, %d", expr, pos)
+    return expr, pos
 
 def parse_int(source, pos):
     """parse_int(source, pos) -> (expr, pos)
@@ -187,12 +211,6 @@ def next_token(source, pos):
 
     >>> next_token("foo()", 0)
     ('foo', 3)
-
-    >>> next_token("", 0)
-    ('', 0)
-
-    >>> next_token("     ", 0)
-    ('', 5)
 
     >>> next_token("foo bar baz", 8)
     ('baz', 11)
