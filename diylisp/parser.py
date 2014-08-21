@@ -12,139 +12,252 @@ the workshop. Its job is to convert strings into data structures that the evalua
 understand.
 """
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
+WHITESPACE    = " \t\n\r"
 TOK_PAR_OPEN  = '('
 TOK_PAR_CLOSE = ')'
+TOK_QUOTE     = '\''
 
 def parse(source):
     """Parse string representation of one *single* expression
     into the corresponding Abstract Syntax Tree."""
-    logger.debug("parse: source=%s", source)
-
+    logger.info("parse: source=%s", source)
     source = source.strip()
     source = remove_comments(source)
 
-    ast = None
-    stack = []
 
-    for tok in token_gen(source):
-        logger.debug("parse: tok=%s, ast=%r, stack=%r", tok, ast, stack)
-        value = None
-        if tok == TOK_PAR_OPEN:
-            logger.debug("parse: TOK_PAR_OPEN")
-            if ast:
-                # new open paren -- push current ast to the stack, make new ast.
-                stack.append(ast)
+    expr, pend = do_parse(source, 0)
 
-            ast = []
+    logger.info("parse: %r, %d (%d)", expr, pend, len(source))
 
-        elif tok == TOK_PAR_CLOSE:
-            logger.debug("parse: TOK_PAR_CLOSE")
-            if stack:
-                # closing paren -- restore previous ast
-                prev = stack.pop()
-                prev.append(ast)
-                ast = prev
+    if pend != len(source):
+        raise LispError("Expected EOF")
 
-        elif parse_boolean(tok) is not None:
-            value = parse_boolean(tok)
-            logger.debug("parse: BOOLEAN: %r", value)
+    return expr
 
-        elif parse_int(tok) is not None:
-            value = parse_int(tok)
-            logger.debug("parse: INTEGER: %r", value)
+def do_parse(source, pos, level=0):
+    def log(msg, *args):
+        logger.info("%s do_parse: " + msg, level*"    ", *args)
 
-        else:
-            logger.debug("parse: SYMBOL")
-            value = tok
+    log("source[%d:]: %s", pos, source[pos:])
 
-        if value is not None:
-            if ast is not None:
-                ast.append(value)
-            else:
-                return value
 
-    return ast
+    pos = skip_whitespace(source, pos)
 
-def parse_int(tok):
+    c = source[pos]
+    if c == TOK_PAR_OPEN:
+        log("TOK_PAR_OPEN")
+        expr, pend = parse_expr(source, pos, level + 1)
+
+    elif c == TOK_PAR_CLOSE:
+        log("TOK_PAR_CLOSE")
+
+    elif c == TOK_QUOTE:
+        log("TOK_QUOTE")
+
+    elif c == '#':
+        log("BOOL")
+        expr, pend = parse_boolean(source, pos)
+
+    elif parse_int(source, pos):
+        log("INT")
+        expr, pend = parse_int(source, pos)
+
+    else:
+        log("SYMBOL")
+        expr, pend = parse_symbol(source, pos)
+
+    log("=> %r, %d %d", expr, pend, len(source))
+    return expr, pend
+
+def parse_expr(source, pos, level=0):
+    """parse_expr() -> ()
+
+    >> parse_expr("()", 0)
+    ([], 2)
+
+    >>> parse_expr("foo", 0)
+    Traceback (most recent call last):
+    ...
+    AssertionError
+    """
+    def log(msg, *args):
+        logger.info("%s parse_expr: " + msg, level*"    ", *args)
+    assert source[pos] == TOK_PAR_OPEN
+
+
+    pclose = find_matching_paren(source, pos)
+    pos += 1 # skip (
+    log("source[%d:%d]: %s", pos, pclose, source[pos:pclose])
+
+
+    expr = []
+
+    while pos < pclose:
+        log("expr: %r pos: %d", expr, pos)
+        pos = skip_whitespace(source, pos)
+
+        sub_expr, pos = do_parse(source[:pclose], pos, level + 1)
+        log("sub_expr: %r pos: %d rest: %s", sub_expr, pos, source[pos:pclose])
+
+        expr.append(sub_expr)
+
+        pos += 1
+
+    log("=> %r, %d", expr, pos)
+    return expr, pclose + 1
+
+
+def parse_int(source, pos):
+    """parse_int(source, pos) -> (expr, pos)
+
+    Parse integer::
+
+    >>> parse_int("111", 0)
+    (111, 3)
+
+    >> parse_int("", 0)
+    None
+    """
+    tok, pend = next_token(source, pos)
+    if not tok:
+        return None
+
     try:
-        return int(tok)
+        return int(tok), pend
     except ValueError, e:
         pass
 
     return None
 
-def parse_boolean(tok):
+def parse_boolean(source, pos):
+    """parse_boolean(source, pos) -> (expr, pos)
+
+    Parse a boolean, retunr expression / pos tuple.
+
+    >>> parse_boolean("#f", 0)
+    (False, 2)
+
+    >>> parse_boolean("#f ", 0)
+    (False, 2)
+    """
+    assert source[pos] == "#"
+
+    tok, pend = next_token(source, pos)
     if tok == "#t":
-        return True
+        return True, pend
     elif tok == "#f":
-        return False
-    return None
+        return False, pend
 
-def parse_symbol(tok):
-    return strip(tok)
+    raise LispError("Parse error: " + tok)
 
+def parse_symbol(source, pos):
+    """parse_symbol(source, pos) -> (expr, pos)
 
-def token_gen(e, level=0):
-    logger.debug("%02d token_gen: e=%s" % (level, e))
-    tok = ""
-    pos = 0
-    while pos < len(e):
-        c = e[pos]
-        logging.debug(" %d %c: '%s'" % (pos, c, tok))
-        if c == TOK_PAR_OPEN:
-            logging.debug("TOK_PAR_OPEN")
-            p = find_matching_paren(e, pos)
-            yield TOK_PAR_OPEN
+    Parse a symbol, retunr expression / pos tuple.
 
-            logging.debug("recur {")
-            for tok1 in token_gen(e[pos+1:p], level=level+1):
-                yield tok1
+    >>> parse_symbol("foo bar baz", 0)
+    ('foo', 3)
 
-            logging.debug("} recur")
+    >>> parse_symbol("foo bar baz", 4)
+    ('bar', 7)
 
-            yield TOK_PAR_CLOSE
+    >>> parse_symbol("foo bar baz", 8)
+    ('baz', 11)
+    """
+    tok, pend = next_token(source, pos)
+    expr = source[pos:pend]
+    return expr, pend
 
-            pos = p + 1
+def next_token(source, pos):
+    """next_token(source, start) -> (token, pos)
 
-            tok = ""
-        elif c == TOK_PAR_CLOSE:
-            raise LispError("Unmatched closing paren.")
-        elif c  in " \n\r":
-            logging.debug("WHITESPACE")
-            if len(tok):
-                yield tok
-            tok = ""
-        else:
-            logging.debug("TOKEN")
-            tok = tok + c
+    Get next token from start::
 
-        pos = pos + 1
+    >>> next_token("foo", 0)
+    ('foo', 3)
 
-    if len(tok):
-        yield tok
+    >>> next_token("foo bar baz", 0)
+    ('foo', 3)
 
+    >>> next_token("foo bar baz", 4)
+    ('bar', 7)
+
+    >>> next_token("foo()", 0)
+    ('foo', 3)
+
+    >>> next_token("", 0)
+    ('', 0)
+
+    >>> next_token("     ", 0)
+    ('', 5)
+
+    >>> next_token("foo bar baz", 8)
+    ('baz', 11)
+
+    """
+    pend = skip_symbol(source, pos)
+    if pend <= len(source):
+        tok = source[pos:pend]
+        return tok, pend
+
+    return None, pend
+
+def skip_whitespace(source, start):
+    """
+    Skip whitespace in source form start::
+
+    >>> skip_whitespace("   foo", 0)
+    3
+
+    >>> skip_whitespace("   foo", 2)
+    3
+
+    >>> skip_whitespace("foo", 0)
+    0
+
+    >>> skip_whitespace("   ", 0)
+    3
+    """
+    return skip_until(source, start, WHITESPACE)
+
+def skip_symbol(source, start):
+    """skip_symbol(source, start) -> int
+
+    Skip symbol starting at start::
+
+    >>> skip_symbol("foo", 0)
+    3
+
+    >>> skip_symbol("foo(", 0)
+    3
+    """
+    return find_chars(source, start, WHITESPACE + TOK_PAR_OPEN + TOK_PAR_CLOSE + TOK_QUOTE)
+
+def find_whitespace(source, start):
+    return find_chars(source, start, WHITESPACE)
+
+def skip_until(source, start, chars):
+    for n, c in enumerate(source[start:]):
+        if c not in chars:
+            return start + n
+    else:
+        return len(source)
+
+def find_chars(source, start, chars):
+    for n, c in enumerate(source[start:]):
+        if c in chars:
+            return start + n
+    else:
+        return len(source)
 
 ##
 ## Below are a few useful utility functions. These should come in handy when
 ## implementing `parse`. We don't want to spend the day implementing parenthesis
 ## counting, after all.
 ##
-
-def next_token(e, pos):
-    tok = ""
-    if len(e) == 0:
-        return (None, 0, "")
-
-    for c in e[pos:]:
-        if c in " \n\r":
-            return (tok, pos, e[pos:])
-        tok = tok + c
-        pos = pos + 1
-
-    return (None, pos, e)
 
 
 def remove_comments(source):
