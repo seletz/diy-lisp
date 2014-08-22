@@ -12,7 +12,6 @@ the workshop. Its job is to convert strings into data structures that the evalua
 understand.
 """
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 WHITESPACE    = " \t\n\r"
@@ -23,14 +22,14 @@ TOK_QUOTE     = '\''
 def parse(source):
     """Parse string representation of one *single* expression
     into the corresponding Abstract Syntax Tree."""
-    logger.info("parse: source=%s", source)
+    logger.debug("parse: source=%s", source)
     source = source.strip()
     source = remove_comments(source)
 
 
     expr, pend = do_parse(source, 0)
 
-    logger.info("parse: %r, %d (%d)", expr, pend, len(source))
+    logger.debug("parse: %r, %d (%d)", expr, pend, len(source))
 
     if pend != len(source):
         raise LispError("Expected EOF")
@@ -39,7 +38,7 @@ def parse(source):
 
 def do_parse(source, pos, level=0):
     def log(msg, *args):
-        logger.info("%s do_parse: " + msg, level*"    ", *args)
+        logger.debug("%s do_parse: " + msg, level*"    ", *args)
 
     log("source[%d:]: %s", pos, source[pos:])
 
@@ -85,7 +84,7 @@ def parse_expr(source, pos, level=0):
     AssertionError
     """
     def log(msg, *args):
-        logger.info("%s parse_expr: " + msg, level*"    ", *args)
+        logger.debug("%s parse_expr: " + msg, level*"    ", *args)
     assert source[pos] == TOK_PAR_OPEN
 
 
@@ -122,7 +121,7 @@ def parse_quote(source, pos, level=0):
 
     """
     def log(msg, *args):
-        logger.info("%s parse_quote: " + msg, level*"    ", *args)
+        logger.debug("%s parse_quote: " + msg, level*"    ", *args)
     assert source[pos] == TOK_QUOTE
 
     pos = pos + 1  # skip '
