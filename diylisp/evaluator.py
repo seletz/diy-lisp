@@ -51,6 +51,16 @@ def eval_list(ast, env):
         assert_exp_length(ast, 2)
         return ast[1]
 
+    elif car == "if":
+        assert_exp_length(ast, 4)
+        predicate = ast[1]
+        consequence = ast[2]
+        alternative = ast[3]
+        if evaluate(predicate, env):
+            return evaluate(consequence, env)
+        else:
+            return evaluate(alternative, env)
+
     elif car == 'atom':
         assert_exp_length(ast, 2)
         return is_atom(evaluate(ast[1], env))
