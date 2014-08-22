@@ -15,15 +15,20 @@ class LispError(Exception):
 
 class Closure:
     def __init__(self, env, params, body):
-        raise NotImplementedError("DIY")
+        self.env = env
+        self.params = params
+        self.body = body
 
-    def __str__(self):
+    def __repr__(self):
         return "<closure/%d>" % len(self.params)
 
 
 class Environment:
     def __init__(self, variables=None):
         self.variables = variables if variables else {}
+
+    def __repr__(self):
+        return "<env %x /%d>" % (id(self), len(self.variables))
 
     def lookup(self, symbol):
         if symbol not in self.variables:
