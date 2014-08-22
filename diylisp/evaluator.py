@@ -80,6 +80,18 @@ def eval_list(ast, env):
         logger.debug("evaluate_list: EQ %r == %r => %r", a, b, a == b)
         return a == b
 
+    elif car == 'define':
+        if len(ast) != 3:
+            raise LispError("define: Wrong number of arguments")
+
+        symbol = ast[1]
+        if not is_symbol(symbol):
+            raise LispError("define: non-symbol: %s", symbol)
+
+        value = evaluate(ast[2], env)
+        env.set(symbol, value)
+        return value
+
     elif car in BUILTINS:
         assert_exp_length(ast, 3)
         a = evaluate(ast[1], env)
@@ -99,7 +111,8 @@ def eval_atom(atom, env):
     if is_boolean(atom):
         return atom
     elif is_symbol(atom):
-        return atom
+        symbol = atom
+        return env.lookup(symbol)
     elif is_integer(atom):
         return atom
 
