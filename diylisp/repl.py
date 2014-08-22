@@ -64,7 +64,7 @@ def read_expression():
 def read_line(prompt):
     """Return touple of user input line and number of unclosed parens"""
 
-    line = input(colored(prompt, "grey", "bold"))
+    line = raw_input(colored(prompt, "grey", "bold"))
     line = remove_comments(line + "\n")
     return line, line.count("(") - line.count(")")
 
