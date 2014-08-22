@@ -41,6 +41,11 @@ def evaluate(ast, env):
 
 def eval_list(ast, env):
     logger.debug("evaluate_list: %r in %r", ast, env)
+    assert is_list(ast)
+
+    if len(ast) == 0:
+        return []
+
     car = head(ast)
     if car == 'quote':
         assert_exp_length(ast, 2)
@@ -71,14 +76,11 @@ def eval_list(ast, env):
         b = evaluate(ast[2], env)
 
         if not is_integer(a):
-            raise LispError("Builtin '%s': can only use integers: %r", a)
+            raise LispError("Builtin '%s': can only use integers: %r" % (car, a))
         if not is_integer(b):
-            raise LispError("Builtin '%s': can only use integers: %r", b)
+            raise LispError("Builtin '%s': can only use integers: %r" % (car, b))
 
         return BUILTINS[car](a, b)
-
-
-
 
 
 def eval_atom(atom, env):
