@@ -69,6 +69,18 @@ def eval_list(ast, env):
     elif first == 'lambda':
         return eval_lambda(ast, env)
 
+    elif first == 'cons':
+        return eval_cons(ast, env)
+
+    elif first == 'head':
+        return eval_head(ast, env)
+
+    elif first == 'tail':
+        return eval_tail(ast, env)
+
+    elif first == 'empty':
+        return eval_empty(ast, env)
+
     elif is_closure(first):
         return eval_closure(ast, env)
 
@@ -164,9 +176,74 @@ def eval_lambda(ast, env):
 
     return Closure(env, params, body)
 
+def eval_cons(ast, env):
+    cons    = head(ast)
+    rest    = tail(ast)
+
+    assert cons == "cons"
+    if len(ast) != 3:
+        raise LispError("cons: wrong number of arguments")
+
+    values = map(lambda e: evaluate(e, env), rest)
+    logger.debug("eval_cons: param values: %r", values)
+
+    return [values[0]] + values[1]
+
+def eval_head(ast, env):
+    hd      = head(ast)
+    rest    = tail(ast)
+
+    assert hd   == "head"
+    if len(ast) != 2:
+        raise LispError("head: wrong number of arguments")
+
+    value = evaluate(rest[0], env)
+    logger.debug("eval_head: param value: %r", value)
+
+    if not value:
+        raise LispError("head: empty list")
+
+    if not is_list(value):
+        raise LispError("head: not a list: %s" % unparse(value))
+
+    return head(value)
+
+def eval_tail(ast, env):
+    hd      = head(ast)
+    rest    = tail(ast)
+
+    assert hd   == "tail"
+    if len(ast) != 2:
+        raise LispError("tail: wrong number of arguments")
+
+    value = evaluate(rest[0], env)
+    logger.debug("eval_tail: param value: %r", value)
+
+    if not is_list(value):
+        raise LispError("tail: not a list: %s" % unparse(value))
+
+    return tail(value)
+
+def eval_empty(ast, env):
+    hd      = head(ast)
+    rest    = tail(ast)
+
+    assert hd   == "empty"
+    if len(ast) != 2:
+        raise LispError("empty: wrong number of arguments")
+
+    value = evaluate(rest[0], env)
+    logger.debug("eval_empty: param value: %r", value)
+
+    if not is_list(value):
+        raise LispError("empty: not a list: %s" % unparse(value))
+
+    return len(value) == 0
+
 def eval_closure(ast, env):
     closure = head(ast)
     rest    = tail(ast)
+
     assert is_closure(closure)
     logger.debug("eval_closure: %r", closure)
     if len(rest) != len(closure.params):
